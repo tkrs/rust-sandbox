@@ -1,0 +1,13 @@
+[package]
+name = "fluentd"
+version = "0.1.0"
+authors = ["Takeru Sato <type.in.type@gmail.com>"]
+
+[dependencies]
+hyper = "0.11"
+rmp = "0.8"
+rmp-serde = "0.13"
+serde = "1.0"
+serde_derive = "1.0"
+lazy_static = "0.2"
+rand = "0.4"

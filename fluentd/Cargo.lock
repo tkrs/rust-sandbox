@@ -1,0 +1,4 @@
+[[package]]
+name = "fluentd"
+version = "0.1.0"
+
