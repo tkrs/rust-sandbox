@@ -10,7 +10,7 @@ use std::sync::{Arc, Mutex};
 use std::thread;
 use tmc::DurationOpt;
 
-use fluent::Client;
+use fluent::client::Client;
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 struct Human {
