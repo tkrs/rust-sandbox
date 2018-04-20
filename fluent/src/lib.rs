@@ -7,7 +7,6 @@ extern crate serde;
 extern crate serde_derive;
 extern crate rmp;
 extern crate rmp_serde as rmps;
-extern crate rand;
 extern crate tmc;
 
 use std::io;

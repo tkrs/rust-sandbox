@@ -1,5 +1,5 @@
 [package]
-name = "main"
+name = "fluent-main"
 version = "0.1.0"
 authors = ["Takeru Sato <type.in.type@gmail.com>"]
 
