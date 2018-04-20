@@ -9,12 +9,14 @@ extern crate rmp;
 extern crate rmp_serde as rmps;
 extern crate tmc;
 
+use std::cell::RefCell;
 use std::io;
 use std::io::{Read, Write};
 use std::net::{TcpStream, ToSocketAddrs};
 use std::sync::mpsc;
 use std::sync::{Arc, Mutex};
 use std::thread;
+use std::collections::HashMap;
 use tmc::DurationOpt;
 
 use rmp::encode;
@@ -34,7 +36,7 @@ struct Response {
 }
 
 enum Message {
-    Incoming(u32, Vec<u8>),
+    Incoming(String, u32, Vec<u8>),
     Flush,
     Terminate,
 }
@@ -74,14 +76,14 @@ impl Client {
 }
 
 impl Client {
-    pub fn send<A>(&self, a: A, timestamp: u32)
+    pub fn send<A>(&self, tag: String, a: A, timestamp: u32)
     where
         A: Serialize + Send + 'static,
     {
         let mut buf = Vec::new();
         a.serialize(&mut Serializer::with(&mut buf, StructMapWriter))
             .unwrap();
-        self.sender.send(Message::Incoming(timestamp, buf)).unwrap();
+        self.sender.send(Message::Incoming(tag, timestamp, buf)).unwrap();
     }
 }
 
@@ -185,11 +187,11 @@ impl Worker {
     fn make_buffer(
         buf: &mut Vec<u8>,
         entries: Vec<(u32, Vec<u8>)>,
+        tag: String,
         chunk: String,
     ) -> Result<(), rmps::encode::Error> {
         buf.push(0x93u8);
-        let tag = "test.human";
-        encode::write_str(buf, tag)?;
+        encode::write_str(buf, tag.as_str())?;
         encode::write_array_len(buf, entries.len() as u32)?;
         for (t, entry) in entries {
             encode::write_array_len(buf, 2)?;
@@ -204,6 +206,7 @@ impl Worker {
 
     fn flush(
         stream: &mut TcpStream,
+        tag: String,
         entry_queue: &mut Vec<(u32, Vec<u8>)>,
         sz: Option<usize>,
     ) -> State {
@@ -226,7 +229,7 @@ impl Worker {
 
         let chunk = base64::encode(&Uuid::new_v4().to_string());
         let mut buf = Vec::new();
-        match Worker::make_buffer(&mut buf, entries, chunk.clone()) {
+        match Worker::make_buffer(&mut buf, entries, tag, chunk.clone()) {
             Ok(_) => Worker::write(stream, &buf[..], chunk),
             Err(e) => {
                 println!("Unexpected error occurred: {:?}.", e);
@@ -236,13 +239,24 @@ impl Worker {
         State::Continue
     }
 
+    fn terminate(
+        stream: &mut TcpStream,
+        tag: String,
+        entry_queue: &mut Vec<(u32, Vec<u8>)>
+    ) {
+        if !entry_queue.is_empty() {
+            // println!("Worker {} has {} entries left.", id, entry_queue.len());
+            Worker::flush(stream, tag, entry_queue, None);
+        }
+    }
+
     fn new(id: usize, receiver: Arc<Mutex<mpsc::Receiver<Message>>>) -> Worker {
         let t = thread::spawn(move || {
             let addr = "127.0.0.1:24224";
 
             let mut stream = Worker::connect(addr).expect("Couldn't connect to the server...");
 
-            let mut entry_queue: Vec<(u32, Vec<u8>)> = Vec::new();
+            let mut entry_queues: HashMap<String, RefCell<Vec<(u32, Vec<u8>)>>> = HashMap::new();
 
             loop {
                 let receiver = receiver.lock().expect("Receiver couldn't be locked.");
@@ -251,19 +265,24 @@ impl Worker {
 
                 match msg {
                     Message::Terminate => {
-                        if !entry_queue.is_empty() {
-                            println!("Worker {} has {} entries left.", id, entry_queue.len());
-                            Worker::flush(&mut stream, &mut entry_queue, None);
+                        for (k, q) in entry_queues.iter() {
+                            let mut q = q.borrow_mut();
+                            Worker::terminate(&mut stream, k.to_string(), &mut q);
                         }
                         break;
                     }
-                    Message::Incoming(t, v) => {
-                        entry_queue.push((t, v));
+                    Message::Incoming(tag, tm, v) => {
+                        let q = entry_queues.entry(tag).or_insert_with(|| RefCell::new(Vec::new()));
+                        let mut q = q.borrow_mut();
+                        q.push((tm, v));
                     }
                     Message::Flush => {
-                        match Worker::flush(&mut stream, &mut entry_queue, Some(50)) {
-                            State::Continue => continue,
-                            State::Break => break,
+                        for (k, q) in entry_queues.iter() {
+                            let mut q = q.borrow_mut();
+                            match Worker::flush(&mut stream, k.to_string(), &mut q, Some(100)) {
+                                State::Continue => continue,
+                                State::Break => break,
+                            }
                         }
                     }
                 };

@@ -38,7 +38,7 @@ fn main() {
 
                 thread::sleep(10.millis());
                 let pool = pool.lock().expect("Client couldn't be locked.");
-                pool.send(human, 1500000000 + i);
+                pool.send(format!("test.human.{}", i), human, 1500000000 + i + age);
             }
         });
         calls.push(t);
