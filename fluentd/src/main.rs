@@ -1,4 +1,4 @@
-// See https://doc.rust-lang.org/book/second-edition/ch20-05-sending-requests-via-channels.html
+// Referred to https://doc.rust-lang.org/book/second-edition/ch20-05-sending-requests-via-channels.html
 
 extern crate base64;
 extern crate uuid;
@@ -12,7 +12,7 @@ extern crate rand;
 use rand::Rng;
 use std::io;
 use std::io::{Read, Write};
-use std::net::{ToSocketAddrs, TcpStream, Shutdown};
+use std::net::{ToSocketAddrs, TcpStream};
 use std::sync::mpsc;
 use std::sync::{Arc, Mutex};
 use std::thread;
@@ -20,19 +20,13 @@ use std::time::Duration;
 
 use uuid::Uuid;
 use serde::{Deserialize, Serialize};
-use rmps::Serializer;
+use rmp::encode;
+use rmps::{Deserializer, Serializer};
 use rmps::encode::StructMapWriter;
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct Options {
     chunk: String
-}
-#[derive(Clone, Debug, PartialEq, Serialize)]
-pub struct Record<A>(String, u32, A, Option<Options>) where A: Serialize + Clone, A: Send + 'static;
-impl <A> Record<A> where A: Serialize + Clone, A: Send + 'static {
-    pub fn new(tag: String, time: u32, a: A, options: Options) -> Record<A>{
-        Record(tag, time, a, Some(options))
-    }
 }
 
 #[derive(Clone, Debug, PartialEq, Deserialize)]
@@ -65,7 +59,7 @@ impl DurationOpt for u32 {
 
 struct Client {
     workers: Vec<Worker>,
-    sender: mpsc::Sender<Message>
+    sender: Arc<Mutex<mpsc::Sender<Message>>>
 }
 
 impl Client {
@@ -76,22 +70,39 @@ impl Client {
 
         let (tx, rx) = mpsc::channel();
         let receiver = Arc::new(Mutex::new(rx));
+        let sender = Arc::new(Mutex::new(tx));
 
         for id in 0..size {
             let worker = Worker::new(id, Arc::clone(&receiver));
             workers.push(worker);
         }
 
+        {
+            let sender = Arc::clone(&sender);
+            thread::spawn(move || {
+                thread::sleep(1.seconds());
+                loop {
+                    let sender = sender.lock().unwrap();
+                    sender.send(Message::Flush).unwrap();
+                    thread::sleep(1.seconds());
+//                    thread::sleep(50.millis());
+                }
+            });
+        }
+
         Client {
             workers,
-            sender: tx
+            sender
         }
     }
 }
 
 impl Client {
-    pub fn send(&self, r: Vec<u8>) {
-        self.sender.send(Message::Incoming(r)).unwrap();
+    pub fn send<A>(&self, a: A, timestamp: u32) where A: Serialize + Send + 'static {
+        let mut buf = Vec::new();
+        a.serialize(&mut Serializer::with(&mut buf, StructMapWriter)).unwrap();
+        let sender = self.sender.lock().expect("Woo!!");
+        sender.send(Message::Incoming(timestamp, buf)).unwrap();
     }
 }
 
@@ -100,7 +111,8 @@ impl Drop for Client {
         println!("Sending terminate message to all workers.");
 
         for _ in &mut self.workers {
-            self.sender.send(Message::Terminate).unwrap();
+            let sender = self.sender.lock().expect("Woo!!");
+            sender.send(Message::Terminate).unwrap();
         }
 
         println!("Shutting down all workers.");
@@ -116,7 +128,8 @@ impl Drop for Client {
 }
 
 enum Message {
-    Incoming(Vec<u8>),
+    Incoming(u32, Vec<u8>),
+    Flush,
     Terminate
 }
 
@@ -129,8 +142,8 @@ impl Worker {
     fn connect<A: ToSocketAddrs + Clone>(addr: A) -> io::Result<TcpStream> {
         let mut r = TcpStream::connect(addr.clone()).map(|s| {
             s.set_nodelay(true).unwrap();
-            s.set_read_timeout(Some(3.seconds()));
-            s.set_write_timeout(Some(3.seconds()));
+            s.set_read_timeout(Some(3.seconds())).unwrap();
+            s.set_write_timeout(Some(3.seconds())).unwrap();
             s
         });
 
@@ -142,8 +155,8 @@ impl Worker {
                     thread::sleep(500.millis());
                     r = TcpStream::connect(addr.clone()).map(|s| {
                         s.set_nodelay(true).unwrap();
-                        s.set_read_timeout(Some(3.seconds()));
-                        s.set_write_timeout(Some(3.seconds()));
+                        s.set_read_timeout(Some(3.seconds())).unwrap();
+                        s.set_write_timeout(Some(3.seconds())).unwrap();
                         s
                     });
                 }
@@ -151,27 +164,19 @@ impl Worker {
         }
 
         r
-
-//        match r {
-//            Ok(s) => {
-//                match s.connect_complete() {
-//                    Err(e) => Err(e),
-//                    Ok(_) => Ok(s)
-//                }
-//            },
-//            Err(e) => Err(e)
-//        }
     }
 
-    fn new(id: usize, reciever: Arc<Mutex<mpsc::Receiver<Message>>>) -> Worker {
+    fn new(id: usize, receiver: Arc<Mutex<mpsc::Receiver<Message>>>) -> Worker {
         let t = thread::spawn(move || {
             let addr = "127.0.0.1:24224";
 
             let mut stream = Worker::connect(addr)
                 .expect("Couldn't connect to the server...");
 
-            loop {
-                let receiver = reciever.lock()
+            let mut entry_queue: Vec<(u32, Vec<u8>)> = Vec::new();
+
+            'outer: loop {
+                let receiver = receiver.lock()
                     .expect("Failed to lock receiver");
 
                 let msg = receiver.recv()
@@ -180,26 +185,77 @@ impl Worker {
                 match msg {
                     Message::Terminate => {
                         println!("Worker {} was told to terminate.", id);
-
                         break
                     },
-                    Message::Incoming(record) => {
-                        println!("Worker {} got a record: {:?}.", id, record);
+                    Message::Incoming(t, v) => {
+                        println!("Worker {} got a record: ({}, {:?}).", id, t, v);
+                        entry_queue.push((t, v));
+                    }
+                    Message::Flush => {
+                        println!("Worker {} was told to flush entries: {}; executing.", entry_queue.len(), id);
+
+                        if entry_queue.is_empty() {
+                            continue 'outer;
+                        }
+
+                        let mut entries = Vec::new();
+                        'acc: for _ in 0..50 {
+                            if entry_queue.is_empty() {
+                                break 'acc;
+                            }
+                            entries.push(entry_queue.remove(0));
+                        }
+                        // let entries = entries.iter().map(|e| (e.0, &e.1[..])).collect();
+
+                        // println!("{:?}", entries);
+                        let mut buf = Vec::new();
+
+                        buf.push(0x93u8);
+
+                        let tag = "test.human";
+                        encode::write_str(&mut buf, tag).unwrap();
+
+                        encode::write_array_len(&mut buf, entries.len() as u32).unwrap();
+                        for (t, entry) in entries {
+                            encode::write_array_len(&mut buf, 2).unwrap();
+                            encode::write_u32(&mut buf, t).unwrap();
+                            for elem in entry {
+                                buf.push(elem);
+                            }
+                        }
+
+                        let chunk = base64::encode(&Uuid::new_v4().to_string());
+                        let ack = chunk.clone();
+                        let options = Some(Options { chunk });
+                        options.serialize(&mut Serializer::with(&mut buf, StructMapWriter)).unwrap();
+
+                        println!("{:?}", buf);
 
                         'inner: loop {
                             let mut _stream = stream.try_clone()
                                 .expect("Failed to clone stream");
 
-                            let rec = &record[..];
+                            let rec = &buf[..];
 
-                            match stream.write_all(rec) {
+                            match _stream.write_all(rec) {
                                 Ok(_) => {
-                                    // TODO: Read ACK ID
-                                    let mut response = String::new();
-                                    stream.read_to_string(&mut response).unwrap();
+                                    _stream.flush().unwrap();
+                                    for _ in 0..10  {
+                                        let mut resp_buf = [0u8; 64];
+                                        match _stream.read(&mut resp_buf) {
+                                            Ok(sz) => {
+                                                let mut de = Deserializer::new(&resp_buf[0..sz]);
+                                                let resp: Response = Deserialize::deserialize(&mut de).unwrap();
+                                                if resp.ack == ack {
+                                                    break 'inner;
+                                                }
+                                            },
+                                            Err(e) => {
+                                                println!("Failed to read response {:?}", e);
+                                            }
+                                        };
+                                    }
 
-                                    println!("Response {:?}", response);
-                                    break 'inner;
                                 },
                                 Err(e) => {
                                     // let _ = _stream.shutdown(Shutdown::Both);
@@ -210,10 +266,14 @@ impl Worker {
                                     continue 'inner;
                                 }
                             }
-
                         }
+                        println!("Worker {} was done flushing entries.", id);
                     }
                 };
+            }
+
+            if ! entry_queue.is_empty() {
+                println!("Worker {} has {} entries left.", id, entry_queue.len());
             }
         });
         Worker { id, thread: Some(t) }
@@ -231,22 +291,17 @@ fn main() {
         let t = thread::spawn(move || {
             for _ in 0..200 {
                 let mut age: u32 = i;
+                let name = String::from("tkrs");
                 let mut rng = rand::thread_rng();
                 if rng.gen() {
                     age = rng.gen_range(0, 100);
                 }
-                thread::sleep(age.millis());
-                let chunk = base64::encode(&Uuid::new_v4().to_string());
-                let msg = Record::new(
-                    "test.human".to_string(),
-                    1500000000 + i,
-                    Human { age, name: "tkrs".to_string() },
-                    Options { chunk }
-                );
-                let mut buf = Vec::new();
-                msg.serialize(&mut Serializer::with(&mut buf, StructMapWriter)).unwrap();
+                thread::sleep(5.millis());
+
+                let human = Human { age, name };
+
                 let pool = pool.lock().unwrap();
-                pool.send(buf);
+                pool.send(human, 1500000000 + i);
             }
         });
         calls.push(t);

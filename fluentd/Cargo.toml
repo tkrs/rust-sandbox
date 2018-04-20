@@ -9,6 +9,7 @@ rmp = "0.8"
 rmp-serde = "0.13"
 serde = "1.0"
 serde_derive = "1.0"
+serde_bytes = "0.10.4"
 lazy_static = "0.2"
 rand = "0.4"
 uuid = { version = "0.6", features = ["v4"] }
