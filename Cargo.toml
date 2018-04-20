@@ -4,3 +4,9 @@ members = [
     "./fluent-main",
     "./tmc"
 ]
+
+[dependencies]
+clippy = {version = "*", optional = true}
+
+[features]
+default = []

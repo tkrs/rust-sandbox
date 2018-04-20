@@ -1,8 +1,8 @@
 extern crate serde;
 #[macro_use]
 extern crate serde_derive;
-extern crate rand;
 extern crate fluent;
+extern crate rand;
 extern crate tmc;
 
 use rand::Rng;
@@ -15,12 +15,11 @@ use fluent::Client;
 #[derive(Clone, Debug, PartialEq, Serialize)]
 struct Human {
     age: u32,
-    name: String
+    name: String,
 }
 
 fn main() {
-
-    let pool = Arc::new(Mutex::new(Client::new(1)));
+    let pool = Arc::new(Mutex::new(Client::new(3)));
 
     let mut calls = Vec::new();
 
@@ -38,7 +37,7 @@ fn main() {
                 let human = Human { age, name };
 
                 thread::sleep(10.millis());
-                let pool = pool.lock().unwrap();
+                let pool = pool.lock().expect("Client couldn't be locked.");
                 pool.send(human, 1500000000 + i);
             }
         });
@@ -46,6 +45,6 @@ fn main() {
     }
 
     for c in calls {
-        c.join().unwrap();
+        c.join().expect("Couldn't join on the associated thread");
     }
 }
