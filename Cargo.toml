@@ -1,4 +1,6 @@
 [workspace]
 members = [
-    "./fluentd"
+    "./fluent",
+    "./fluent-main",
+    "./tmc"
 ]
