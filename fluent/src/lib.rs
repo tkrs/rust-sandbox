@@ -11,5 +11,5 @@ extern crate tmc;
 
 pub mod client;
 
-mod worker;
 mod message;
+mod worker;

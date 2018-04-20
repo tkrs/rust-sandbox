@@ -3,4 +3,3 @@ pub enum Message {
     Flush,
     Terminate,
 }
-

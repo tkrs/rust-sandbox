@@ -1,12 +1,12 @@
+use message;
+use rmps::encode::StructMapWriter;
+use rmps::Serializer;
+use serde::Serialize;
 use std::sync::mpsc;
 use std::sync::{Arc, Mutex};
 use std::thread;
 use tmc::DurationOpt;
-use rmps::encode::StructMapWriter;
-use rmps::Serializer;
-use serde::Serialize;
 use worker;
-use message;
 
 pub struct Client {
     workers: Vec<worker::Worker>,

@@ -1,3 +1,10 @@
+use base64;
+use message;
+use rmp::encode;
+use rmps;
+use rmps::encode::StructMapWriter;
+use rmps::{Deserializer, Serializer};
+use serde::{Deserialize, Serialize};
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::io;
@@ -7,14 +14,7 @@ use std::sync::mpsc;
 use std::sync::{Arc, Mutex};
 use std::thread;
 use tmc::DurationOpt;
-use base64;
-use rmp::encode;
-use rmps;
-use rmps::encode::StructMapWriter;
-use rmps::{Deserializer, Serializer};
-use serde::{Deserialize, Serialize};
 use uuid::Uuid;
-use message;
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 struct Options {
