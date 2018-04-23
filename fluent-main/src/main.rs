@@ -1,14 +1,14 @@
+extern crate fluent;
+extern crate rand;
 extern crate serde;
 #[macro_use]
 extern crate serde_derive;
-extern crate fluent;
-extern crate rand;
 extern crate tmc;
 
 use rand::Rng;
-use std::time::SystemTime;
 use std::sync::{Arc, Mutex};
 use std::thread;
+use std::time::SystemTime;
 use tmc::DurationOpt;
 
 use fluent::client::{Client, WorkerPool};
@@ -30,11 +30,8 @@ fn main() {
             let mut rng = rand::thread_rng();
             for _ in 0..200 {
                 let name = String::from("tkrs");
-                let age: u32 = if rng.gen() {
-                    rng.gen_range(0, 100)
-                } else {
-                    i
-                };
+                let age: u32 =
+                    if rng.gen() { rng.gen_range(0, 100) } else { i };
 
                 let tag = format!("test.human.{}", i);
                 let a = Human { age, name };

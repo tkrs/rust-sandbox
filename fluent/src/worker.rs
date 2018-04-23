@@ -1,10 +1,10 @@
 use base64;
+use event_time::TimeConverter;
 use rmp::encode;
 use rmps;
 use rmps::encode::StructMapWriter;
 use rmps::{Deserializer, Serializer};
 use serde::{Deserialize, Serialize};
-use std::time::SystemTime;
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::io;
@@ -13,9 +13,9 @@ use std::net::{TcpStream, ToSocketAddrs};
 use std::sync::mpsc;
 use std::sync::{Arc, Mutex};
 use std::thread;
+use std::time::SystemTime;
 use tmc::DurationOpt;
 use uuid::Uuid;
-use event_time::TimeConverter;
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 struct Options {
@@ -45,7 +45,8 @@ impl Worker {
 
             let mut stream = Worker::connect(addr).expect("Couldn't connect to the server...");
 
-            let mut entry_queues: HashMap<String, RefCell<Vec<(SystemTime, Vec<u8>)>>> = HashMap::new();
+            let mut entry_queues: HashMap<String, RefCell<Vec<(SystemTime, Vec<u8>)>>> =
+                HashMap::new();
 
             loop {
                 let receiver = receiver.lock().expect("Receiver couldn't be locked.");
@@ -56,7 +57,7 @@ impl Worker {
                     Message::Terminate => {
                         for (k, q) in entry_queues.iter() {
                             let mut q = q.borrow_mut();
-                            Worker::terminate(&mut stream, k.to_string(), &mut q);
+                            Worker::terminate(id, &mut stream, k.to_string(), &mut q);
                         }
                         break;
                     }
@@ -67,15 +68,13 @@ impl Worker {
                         let mut q = q.borrow_mut();
                         q.push((tm, v));
                     }
-                    Message::Flush => {
-                        for (k, q) in entry_queues.iter() {
-                            let mut q = q.borrow_mut();
-                            match Worker::flush(&mut stream, k.to_string(), &mut q, Some(100)) {
-                                State::Continue => continue,
-                                State::Break => break,
-                            }
+                    Message::Flush => for (k, q) in entry_queues.iter() {
+                        let mut q = q.borrow_mut();
+                        match Worker::flush(&mut stream, k.to_string(), &mut q, Some(100)) {
+                            State::Continue => continue,
+                            State::Break => break,
                         }
-                    }
+                    },
                 };
             }
         });
@@ -97,7 +96,7 @@ impl Worker {
             match r {
                 Ok(_) => break,
                 Err(e) => {
-                    println!("An error occurred {:?}", e);
+                    warn!("An error occurred {:?}", e);
                     thread::sleep(500.millis());
                     r = TcpStream::connect(addr.clone()).map(|s| {
                         s.set_nodelay(true).unwrap();
@@ -132,13 +131,13 @@ impl Worker {
                                 }
                             }
                             Err(e) => {
-                                println!("Failed to read response {:?}", e);
+                                warn!("Failed to read response {:?}", e);
                             }
                         };
                     }
                 }
                 Err(e) => {
-                    println!("Failed to write record. {:?}", e);
+                    warn!("Failed to write record. {:?}", e);
                     // let _ = _stream.shutdown(Shutdown::Both);
                     let addr = stream.local_addr().unwrap();
                     *stream = Worker::connect(addr).expect("Couldn't connect to the server...");
@@ -196,20 +195,25 @@ impl Worker {
         let mut buf = Vec::new();
         match Worker::make_buffer(&mut buf, entries, tag, chunk.clone()) {
             Ok(_) => {
-                // println!("{:?}", buf);
+                debug!("{:?}", buf);
                 Worker::write(stream, &buf[..], chunk)
-            },
+            }
             Err(e) => {
-                println!("Unexpected error occurred: {:?}.", e);
+                error!("Unexpected error occurred during making msgpack: {:?}.", e);
                 return State::Break;
             }
         }
         State::Continue
     }
 
-    fn terminate(stream: &mut TcpStream, tag: String, entry_queue: &mut Vec<(SystemTime, Vec<u8>)>) {
+    fn terminate(
+        id: usize,
+        stream: &mut TcpStream,
+        tag: String,
+        entry_queue: &mut Vec<(SystemTime, Vec<u8>)>,
+    ) {
         if !entry_queue.is_empty() {
-            // println!("Worker {} has {} entries left.", id, entry_queue.len());
+            debug!("Worker {} has {} entries left.", id, entry_queue.len());
             Worker::flush(stream, tag, entry_queue, None);
         }
     }

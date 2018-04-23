@@ -1,18 +1,18 @@
+use log::Level::{Debug, Error, Warn};
 use rmps::encode::StructMapWriter;
 use rmps::Serializer;
 use serde::Serialize;
-use std::time::SystemTime;
 use std::sync::mpsc;
 use std::sync::{Arc, Mutex};
 use std::thread;
+use std::time::SystemTime;
 use tmc::DurationOpt;
 use worker;
 
 pub trait Client {
-
     fn send<A>(&self, tag: String, a: A, timestamp: SystemTime)
-        where
-            A: Serialize + Send + 'static;
+    where
+        A: Serialize + Send + 'static;
 }
 
 pub struct WorkerPool {
@@ -65,17 +65,17 @@ impl Client for WorkerPool {
 
 impl Drop for WorkerPool {
     fn drop(&mut self) {
-        println!("Sending terminate message to all workers.");
+        debug!("Sending terminate message to all workers.");
 
         for _ in &mut self.workers {
             let sender = self.sender.clone();
             sender.send(worker::Message::Terminate).unwrap();
         }
 
-        println!("Shutting down all workers.");
+        debug!("Shutting down all workers.");
 
         for wkr in &mut self.workers {
-            println!("Shutting down worker {}", wkr.id);
+            debug!("Shutting down worker {}", wkr.id);
 
             if let Some(w) = wkr.thread.take() {
                 w.join().unwrap();
