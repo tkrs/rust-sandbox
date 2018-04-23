@@ -10,7 +10,7 @@ use std::sync::{Arc, Mutex};
 use std::thread;
 use tmc::DurationOpt;
 
-use fluent::client::Client;
+use fluent::client::{Client, WorkerPool};
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 struct Human {
@@ -19,7 +19,7 @@ struct Human {
 }
 
 fn main() {
-    let pool = Arc::new(Mutex::new(Client::new(3)));
+    let pool = Arc::new(Mutex::new(WorkerPool::new(3)));
 
     let mut calls = Vec::new();
 

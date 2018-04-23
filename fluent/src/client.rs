@@ -8,13 +8,20 @@ use std::thread;
 use tmc::DurationOpt;
 use worker;
 
-pub struct Client {
+pub trait Client {
+
+    fn send<A>(&self, tag: String, a: A, timestamp: u32)
+        where
+            A: Serialize + Send + 'static;
+}
+
+pub struct WorkerPool {
     workers: Vec<worker::Worker>,
     sender: mpsc::Sender<message::Message>,
 }
 
-impl Client {
-    pub fn new(size: usize) -> Client {
+impl WorkerPool {
+    pub fn new(size: usize) -> WorkerPool {
         assert!(size > 0);
 
         let mut workers = Vec::with_capacity(size);
@@ -35,15 +42,15 @@ impl Client {
             });
         }
 
-        Client {
+        WorkerPool {
             workers,
             sender: tx,
         }
     }
 }
 
-impl Client {
-    pub fn send<A>(&self, tag: String, a: A, timestamp: u32)
+impl Client for WorkerPool {
+    fn send<A>(&self, tag: String, a: A, timestamp: u32)
     where
         A: Serialize + Send + 'static,
     {
@@ -56,7 +63,7 @@ impl Client {
     }
 }
 
-impl Drop for Client {
+impl Drop for WorkerPool {
     fn drop(&mut self) {
         println!("Sending terminate message to all workers.");
 
