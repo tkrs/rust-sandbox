@@ -20,7 +20,8 @@ struct Human {
 }
 
 fn main() {
-    let pool = Arc::new(Mutex::new(WorkerPool::new(3)));
+    let pool = WorkerPool::new("127.0.0.1:24224").expect("Couldn't create the worker pool.");
+    let pool = Arc::new(Mutex::new(pool));
 
     let mut calls = Vec::new();
 
