@@ -27,20 +27,22 @@ fn main() {
     for i in 0..5 {
         let pool = Arc::clone(&pool);
         let t = thread::spawn(move || {
+            let mut rng = rand::thread_rng();
             for _ in 0..200 {
-                let mut age: u32 = i;
                 let name = String::from("tkrs");
-                let mut rng = rand::thread_rng();
-                if rng.gen() {
-                    age = rng.gen_range(0, 100);
-                }
+                let age: u32 = if rng.gen() {
+                    rng.gen_range(0, 100)
+                } else {
+                    i
+                };
 
-                let human = Human { age, name };
+                let tag = format!("test.human.{}", i);
+                let a = Human { age, name };
                 let timestamp = SystemTime::now();
 
                 thread::sleep(10.millis());
                 let pool = pool.lock().expect("Client couldn't be locked.");
-                pool.send(format!("test.human.{}", i), human, timestamp);
+                pool.send(tag, a, timestamp);
             }
         });
         calls.push(t);
