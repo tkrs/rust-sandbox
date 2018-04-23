@@ -159,6 +159,7 @@ impl Worker {
         encode::write_str(buf, tag.as_str())?;
         encode::write_array_len(buf, entries.len() as u32)?;
         for (t, entry) in entries {
+            encode::write_array_len(buf, 2)?;
             t.event_time(buf)?;
             for elem in entry {
                 buf.push(elem);
@@ -194,7 +195,10 @@ impl Worker {
         let chunk = base64::encode(&Uuid::new_v4().to_string());
         let mut buf = Vec::new();
         match Worker::make_buffer(&mut buf, entries, tag, chunk.clone()) {
-            Ok(_) => Worker::write(stream, &buf[..], chunk),
+            Ok(_) => {
+                // println!("{:?}", buf);
+                Worker::write(stream, &buf[..], chunk)
+            },
             Err(e) => {
                 println!("Unexpected error occurred: {:?}.", e);
                 return State::Break;
