@@ -1,10 +1,10 @@
 use base64;
-use message;
 use rmp::encode;
 use rmps;
 use rmps::encode::StructMapWriter;
 use rmps::{Deserializer, Serializer};
 use serde::{Deserialize, Serialize};
+use std::time::SystemTime;
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::io;
@@ -15,6 +15,7 @@ use std::sync::{Arc, Mutex};
 use std::thread;
 use tmc::DurationOpt;
 use uuid::Uuid;
+use event_time::TimeConverter;
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 struct Options {
@@ -38,13 +39,13 @@ pub struct Worker {
 }
 
 impl Worker {
-    pub fn new(id: usize, receiver: Arc<Mutex<mpsc::Receiver<message::Message>>>) -> Worker {
+    pub fn new(id: usize, receiver: Arc<Mutex<mpsc::Receiver<Message>>>) -> Worker {
         let t = thread::spawn(move || {
             let addr = "127.0.0.1:24224";
 
             let mut stream = Worker::connect(addr).expect("Couldn't connect to the server...");
 
-            let mut entry_queues: HashMap<String, RefCell<Vec<(u32, Vec<u8>)>>> = HashMap::new();
+            let mut entry_queues: HashMap<String, RefCell<Vec<(SystemTime, Vec<u8>)>>> = HashMap::new();
 
             loop {
                 let receiver = receiver.lock().expect("Receiver couldn't be locked.");
@@ -52,21 +53,21 @@ impl Worker {
                 let msg = receiver.recv().expect("Couldn't receive a message.");
 
                 match msg {
-                    message::Message::Terminate => {
+                    Message::Terminate => {
                         for (k, q) in entry_queues.iter() {
                             let mut q = q.borrow_mut();
                             Worker::terminate(&mut stream, k.to_string(), &mut q);
                         }
                         break;
                     }
-                    message::Message::Incoming(tag, tm, v) => {
+                    Message::Incoming(tag, tm, v) => {
                         let q = entry_queues
                             .entry(tag)
                             .or_insert_with(|| RefCell::new(Vec::new()));
                         let mut q = q.borrow_mut();
                         q.push((tm, v));
                     }
-                    message::Message::Flush => {
+                    Message::Flush => {
                         for (k, q) in entry_queues.iter() {
                             let mut q = q.borrow_mut();
                             match Worker::flush(&mut stream, k.to_string(), &mut q, Some(100)) {
@@ -150,7 +151,7 @@ impl Worker {
 
     fn make_buffer(
         buf: &mut Vec<u8>,
-        entries: Vec<(u32, Vec<u8>)>,
+        entries: Vec<(SystemTime, Vec<u8>)>,
         tag: String,
         chunk: String,
     ) -> Result<(), rmps::encode::Error> {
@@ -158,8 +159,7 @@ impl Worker {
         encode::write_str(buf, tag.as_str())?;
         encode::write_array_len(buf, entries.len() as u32)?;
         for (t, entry) in entries {
-            encode::write_array_len(buf, 2)?;
-            encode::write_u32(buf, t)?;
+            t.event_time(buf)?;
             for elem in entry {
                 buf.push(elem);
             }
@@ -171,7 +171,7 @@ impl Worker {
     fn flush(
         stream: &mut TcpStream,
         tag: String,
-        entry_queue: &mut Vec<(u32, Vec<u8>)>,
+        entry_queue: &mut Vec<(SystemTime, Vec<u8>)>,
         sz: Option<usize>,
     ) -> State {
         if entry_queue.is_empty() {
@@ -203,10 +203,16 @@ impl Worker {
         State::Continue
     }
 
-    fn terminate(stream: &mut TcpStream, tag: String, entry_queue: &mut Vec<(u32, Vec<u8>)>) {
+    fn terminate(stream: &mut TcpStream, tag: String, entry_queue: &mut Vec<(SystemTime, Vec<u8>)>) {
         if !entry_queue.is_empty() {
             // println!("Worker {} has {} entries left.", id, entry_queue.len());
             Worker::flush(stream, tag, entry_queue, None);
         }
     }
+}
+
+pub enum Message {
+    Incoming(String, SystemTime, Vec<u8>),
+    Flush,
+    Terminate,
 }

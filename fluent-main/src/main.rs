@@ -6,6 +6,7 @@ extern crate rand;
 extern crate tmc;
 
 use rand::Rng;
+use std::time::SystemTime;
 use std::sync::{Arc, Mutex};
 use std::thread;
 use tmc::DurationOpt;
@@ -35,10 +36,11 @@ fn main() {
                 }
 
                 let human = Human { age, name };
+                let timestamp = SystemTime::now();
 
                 thread::sleep(10.millis());
                 let pool = pool.lock().expect("Client couldn't be locked.");
-                pool.send(format!("test.human.{}", i), human, 1500000000 + i + age);
+                pool.send(format!("test.human.{}", i), human, timestamp);
             }
         });
         calls.push(t);

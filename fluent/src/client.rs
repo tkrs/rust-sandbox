@@ -1,7 +1,7 @@
-use message;
 use rmps::encode::StructMapWriter;
 use rmps::Serializer;
 use serde::Serialize;
+use std::time::SystemTime;
 use std::sync::mpsc;
 use std::sync::{Arc, Mutex};
 use std::thread;
@@ -10,14 +10,14 @@ use worker;
 
 pub trait Client {
 
-    fn send<A>(&self, tag: String, a: A, timestamp: u32)
+    fn send<A>(&self, tag: String, a: A, timestamp: SystemTime)
         where
             A: Serialize + Send + 'static;
 }
 
 pub struct WorkerPool {
     workers: Vec<worker::Worker>,
-    sender: mpsc::Sender<message::Message>,
+    sender: mpsc::Sender<worker::Message>,
 }
 
 impl WorkerPool {
@@ -38,7 +38,7 @@ impl WorkerPool {
             let sender = tx.clone();
             thread::spawn(move || loop {
                 thread::sleep(20.millis());
-                sender.send(message::Message::Flush).unwrap();
+                sender.send(worker::Message::Flush).unwrap();
             });
         }
 
@@ -50,7 +50,7 @@ impl WorkerPool {
 }
 
 impl Client for WorkerPool {
-    fn send<A>(&self, tag: String, a: A, timestamp: u32)
+    fn send<A>(&self, tag: String, a: A, timestamp: SystemTime)
     where
         A: Serialize + Send + 'static,
     {
@@ -58,7 +58,7 @@ impl Client for WorkerPool {
         a.serialize(&mut Serializer::with(&mut buf, StructMapWriter))
             .unwrap();
         self.sender
-            .send(message::Message::Incoming(tag, timestamp, buf))
+            .send(worker::Message::Incoming(tag, timestamp, buf))
             .unwrap();
     }
 }
@@ -69,7 +69,7 @@ impl Drop for WorkerPool {
 
         for _ in &mut self.workers {
             let sender = self.sender.clone();
-            sender.send(message::Message::Terminate).unwrap();
+            sender.send(worker::Message::Terminate).unwrap();
         }
 
         println!("Shutting down all workers.");
