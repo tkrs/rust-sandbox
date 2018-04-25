@@ -13,5 +13,9 @@ extern crate uuid;
 
 pub mod client;
 
-mod event_time;
+mod buffer;
+mod emitter;
+mod error;
+mod stream;
+mod time_conv;
 mod worker;

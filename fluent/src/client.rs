@@ -1,6 +1,8 @@
+use error::Error;
 use rmps::encode::StructMapWriter;
 use rmps::Serializer;
 use serde::Serialize;
+use std::error::Error as StdError;
 use std::io;
 use std::net::ToSocketAddrs;
 use std::sync::mpsc;
@@ -8,17 +10,18 @@ use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::{Duration, SystemTime};
 use tmc::DurationOpt;
-use worker;
+use worker::{Worker, Message};
+use stream;
 
 pub trait Client {
-    fn send<A>(&self, tag: String, a: A, timestamp: SystemTime)
+    fn send<A>(&self, tag: String, a: A, timestamp: SystemTime) -> Result<(), Error>
     where
         A: Serialize + Send + 'static;
 }
 
 pub struct WorkerPool {
-    workers: Vec<worker::Worker>,
-    sender: mpsc::Sender<worker::Message>,
+    workers: Vec<Worker>,
+    sender: mpsc::Sender<Message>,
 }
 
 impl WorkerPool {
@@ -42,17 +45,17 @@ impl WorkerPool {
         let receiver = Arc::new(Mutex::new(receiver));
 
         for id in 0..settings.workers {
-            let settings = worker::Settings {
-                connection_retry_initial_delay: settings.connection_retry_initial_delay,
-                connection_retry_max_delay: settings.connection_retry_max_delay,
-                connection_retry_timeout: settings.connection_retry_timeout,
+            let conn_settings = stream::ConnectionSettings {
+                connect_retry_initial_delay: settings.connection_retry_initial_delay,
+                connect_retry_max_delay: settings.connection_retry_max_delay,
+                connect_retry_timeout: settings.connection_retry_timeout,
                 write_timeout: settings.write_timeout,
-                emit_retry_initial_delay: settings.emit_retry_initial_delay,
-                emit_retry_max_delay: settings.emit_retry_max_delay,
-                emit_retry_timeout: settings.emit_retry_timeout,
                 read_timeout: settings.read_timeout,
+                write_retry_initial_delay: settings.emit_retry_initial_delay,
+                write_retry_max_delay: settings.emit_retry_max_delay,
+                write_retry_timeout: settings.emit_retry_timeout,
             };
-            let wkr = worker::Worker::new(id, addr.clone(), settings, Arc::clone(&receiver));
+            let wkr = Worker::new(id, addr.clone(), conn_settings, Arc::clone(&receiver));
             workers.push(wkr);
         }
 
@@ -63,7 +66,7 @@ impl WorkerPool {
             builder.spawn(move || loop {
                 thread::sleep(settings.flush_period);
                 sender
-                    .send(worker::Message::Flush(settings.max_flush_entries))
+                    .send(Message::Flush(settings.max_flush_entries))
                     .unwrap();
             })?;
         }
@@ -73,16 +76,17 @@ impl WorkerPool {
 }
 
 impl Client for WorkerPool {
-    fn send<A>(&self, tag: String, a: A, timestamp: SystemTime)
+    fn send<A>(&self, tag: String, a: A, timestamp: SystemTime) -> Result<(), Error>
     where
         A: Serialize + Send + 'static,
     {
         let mut buf = Vec::new();
         a.serialize(&mut Serializer::with(&mut buf, StructMapWriter))
-            .unwrap();
+            .map_err(|e| Error::DeriveError(e.description().to_string()))?;
         self.sender
-            .send(worker::Message::Queuing(tag, timestamp, buf))
-            .unwrap();
+            .send(Message::Queuing(tag, timestamp, buf))
+            .map_err(|e| Error::SendError(e.description().to_string()))?;
+        Ok(())
     }
 }
 
@@ -92,7 +96,7 @@ impl Drop for WorkerPool {
 
         for _ in &mut self.workers {
             let sender = self.sender.clone();
-            sender.send(worker::Message::Terminate).unwrap();
+            sender.send(Message::Terminate).unwrap();
         }
 
         debug!("Shutting down all workers.");

@@ -2,11 +2,11 @@ use rmp::encode::ValueWriteError;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 pub trait TimeConverter {
-    fn event_time(&self, buf: &mut Vec<u8>) -> Result<(), ValueWriteError>;
+    fn write_time(&self, buf: &mut Vec<u8>) -> Result<(), ValueWriteError>;
 }
 
 impl TimeConverter for SystemTime {
-    fn event_time(&self, buf: &mut Vec<u8>) -> Result<(), ValueWriteError> {
+    fn write_time(&self, buf: &mut Vec<u8>) -> Result<(), ValueWriteError> {
         let d = self.duration_since(UNIX_EPOCH).unwrap();
         buf.push(0xd7);
         buf.push(0x00);
