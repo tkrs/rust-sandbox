@@ -9,9 +9,9 @@ use std::sync::mpsc;
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::{Duration, SystemTime};
-use tmc::DurationOpt;
-use worker::{Worker, Message};
 use stream;
+use tmc::DurationOpt;
+use worker::{Message, Worker};
 
 pub trait Client {
     fn send<A>(&self, tag: String, a: A, timestamp: SystemTime) -> Result<(), Error>

@@ -10,9 +10,9 @@ use std::collections::VecDeque;
 use std::error::Error as StdError;
 use std::io::Read;
 use std::time::SystemTime;
+use stream::ReconnectableWriter;
 use time_conv::TimeConverter;
 use uuid::Uuid;
-use stream::ReconnectableWriter;
 
 pub struct Emitter {
     tag: String,

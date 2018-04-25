@@ -1,15 +1,14 @@
 use std::cell::RefCell;
 use std::io::{self, ErrorKind, Read, Write};
-use std::net::{SocketAddr,ToSocketAddrs, TcpStream};
-use std::time::{Duration, Instant};
+use std::net::{SocketAddr, TcpStream, ToSocketAddrs};
 use std::thread;
+use std::time::{Duration, Instant};
 
 pub struct Stream {
     addr: SocketAddr,
     stream: RefCell<TcpStream>,
     settings: ConnectionSettings,
 }
-
 
 #[derive(Clone, Copy)]
 pub struct ConnectionSettings {
@@ -25,11 +24,18 @@ pub struct ConnectionSettings {
 }
 
 impl Stream {
-    pub fn connect<A>(addr: A, settings: ConnectionSettings) -> io::Result<Stream> where A: ToSocketAddrs + Clone {
+    pub fn connect<A>(addr: A, settings: ConnectionSettings) -> io::Result<Stream>
+    where
+        A: ToSocketAddrs + Clone,
+    {
         let stream = connect(addr.clone(), settings.clone())?;
         let addr = stream.local_addr()?;
         let stream = RefCell::new(stream);
-        Ok(Stream { addr, stream , settings})
+        Ok(Stream {
+            addr,
+            stream,
+            settings,
+        })
     }
 }
 pub trait Reconnect {
@@ -61,8 +67,8 @@ impl Read for Stream {
 }
 
 fn connect<A>(addr: A, settings: ConnectionSettings) -> io::Result<TcpStream>
-    where
-        A: ToSocketAddrs + Clone,
+where
+    A: ToSocketAddrs + Clone,
 {
     let start = Instant::now();
     let mut retry_delay = settings.connect_retry_initial_delay;
@@ -116,7 +122,7 @@ impl ReconnectableWriter for Stream {
                     match e.kind() {
                         ErrorKind::BrokenPipe
                         | ErrorKind::ConnectionRefused
-                        | ErrorKind::ConnectionAborted => loop {
+                        | ErrorKind::ConnectionAborted => {
                             debug!("Try reconnect.");
                             match self.reconnect() {
                                 Err(e) => {
@@ -124,8 +130,8 @@ impl ReconnectableWriter for Stream {
                                 }
                                 _ => {}
                             }
-                        },
-                        _ => {},
+                        }
+                        _ => {}
                     }
                 }
             }

@@ -7,7 +7,7 @@ use std::sync::mpsc;
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::SystemTime;
-use stream::{Stream, ReconnectableWriter, ConnectionSettings};
+use stream::{ConnectionSettings, ReconnectableWriter, Stream};
 
 pub struct Worker {
     pub id: usize,
@@ -25,7 +25,8 @@ impl Worker {
         A: ToSocketAddrs + Clone,
         A: Send + 'static,
     {
-        let mut stream = Stream::connect(addr, conn_settings).expect(&format!("Worker {} couldn't connect to server.", id));
+        let mut stream = Stream::connect(addr, conn_settings)
+            .expect(&format!("Worker {} couldn't connect to server.", id));
 
         let emitters = RefCell::new(HashMap::new());
         let wh = WorkerHandler { emitters };
@@ -71,7 +72,10 @@ impl WorkerHandler {
     {
         for (tag, emitter) in self.emitters.borrow().iter() {
             if let Err(e) = emitter.emit(w, size) {
-                error!("A tag: {} unexpected error occurred during emitting message; cause: {:?}.", tag, e);
+                error!(
+                    "A tag: {} unexpected error occurred during emitting message; cause: {:?}.",
+                    tag, e
+                );
             }
         }
     }
