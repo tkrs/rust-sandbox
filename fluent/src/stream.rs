@@ -112,12 +112,12 @@ impl ReconnectableWriter for Stream {
                 Ok(_) => return Ok(()),
                 Err(e) => {
                     thread::sleep(retry_delay);
-                    println!("Write error found {:?}.", e);
+                    debug!("Write error found {:?}.", e);
                     match e.kind() {
                         ErrorKind::BrokenPipe
                         | ErrorKind::ConnectionRefused
                         | ErrorKind::ConnectionAborted => loop {
-                            println!("Try reconnect.");
+                            debug!("Try reconnect.");
                             match self.reconnect() {
                                 Err(e) => {
                                     return Err(e);
