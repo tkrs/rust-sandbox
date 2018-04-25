@@ -73,7 +73,7 @@ impl WorkerHandler {
         for (tag, emitter) in self.emitters.borrow().iter() {
             if let Err(e) = emitter.emit(w, size) {
                 error!(
-                    "A tag: {} unexpected error occurred during emitting message; cause: {:?}.",
+                    "Tag: {}, an unexpected error occurred during emitting message. Details: {:?}",
                     tag, e
                 );
             }
