@@ -288,7 +288,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 [[package]]
 name = "poston"
 version = "0.1.0"
-source = "git+https://github.com/tkrs/poston#ef237b254b3bd3ea12695bd3944a6824cff815a5"
+source = "git+https://github.com/tkrs/poston#e19264ef7eb6c1ade93543adc8d6526a322c4a42"
 dependencies = [
  "base64 0.9.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "log 0.4.1 (registry+https://github.com/rust-lang/crates.io-index)",
