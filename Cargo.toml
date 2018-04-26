@@ -1,8 +1,8 @@
 [workspace]
 members = [
     "./retry",
-    "./fluent",
     "./fluent-main",
+    "./traits",
     "./tmc"
 ]
 

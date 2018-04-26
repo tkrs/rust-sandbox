@@ -10,5 +10,5 @@ rmp-serde = "0.13"
 serde = "1.0"
 serde_derive = "1.0"
 rand = "0.4"
-fluent = { path = "../fluent" }
+poston = { git = "https://github.com/tkrs/poston" }
 tmc = { path = "../tmc" }
