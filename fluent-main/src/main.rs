@@ -8,7 +8,7 @@ extern crate tmc;
 use rand::Rng;
 use std::sync::{Arc, Mutex};
 use std::thread;
-use std::time::{Instant, SystemTime};
+use std::time::{Duration, Instant, SystemTime};
 use tmc::DurationOpt;
 
 use poston::client::{Client, WorkerPool, Settings};
@@ -25,7 +25,7 @@ fn main() {
     let settins = Settings {
         workers: 4,
         flush_period: 64.millis(),
-        max_flush_entries: 2048,
+        max_flush_entries: 5120,
         ..Default::default()
     };
     let pool = WorkerPool::with_settings(&addr, &settins)
@@ -36,11 +36,11 @@ fn main() {
 
     let start = Instant::now();
 
-    for i in 0..4 {
+    for i in 0..2 {
         let pool = Arc::clone(&pool);
         let t = thread::spawn(move || {
             let mut rng = rand::thread_rng();
-            for _ in 0..25000 {
+            for _ in 0..500_000 {
                 let name = String::from("tkrs");
                 let age: u32 =
                     if rng.gen() { rng.gen_range(0, 100) } else { i };
@@ -52,6 +52,7 @@ fn main() {
                 // thread::sleep(10.millis());
                 let pool = pool.lock().expect("Client couldn't be locked.");
                 pool.send(tag, a, timestamp).unwrap();
+                thread::sleep(Duration::new(0, 5));
             }
         });
         calls.push(t);
@@ -63,5 +64,5 @@ fn main() {
 
     drop(pool);
 
-    println!("{}", start.elapsed().subsec_nanos());
+    println!("{:?}", start.elapsed());
 }
