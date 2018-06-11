@@ -3,9 +3,7 @@ members = [
     "./retry",
     "./fluent-main",
     "./traits",
-    "./tmc",
-    "./run-hyper",
-    "./run-hyper10"
+    "./tmc"
 ]
 
 [dependencies]

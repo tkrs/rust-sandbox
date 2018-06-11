@@ -11,7 +11,7 @@ use std::thread;
 use std::time::{Duration, Instant, SystemTime};
 use tmc::DurationOpt;
 
-use poston::client::{Client, WorkerPool, Settings};
+use poston::client::{Client, Settings, WorkerPool};
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 struct Human {
@@ -28,8 +28,8 @@ fn main() {
         max_flush_entries: 5120,
         ..Default::default()
     };
-    let pool = WorkerPool::with_settings(&addr, &settins)
-        .expect("Couldn't create the worker pool.");
+    let pool =
+        WorkerPool::with_settings(&addr, &settins).expect("Couldn't create the worker pool.");
     let pool = Arc::new(Mutex::new(pool));
 
     let mut calls = Vec::new();
