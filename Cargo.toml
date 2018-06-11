@@ -7,7 +7,6 @@ members = [
 ]
 
 [dependencies]
-clippy = {version = "*", optional = true}
 
 [features]
 default = []
