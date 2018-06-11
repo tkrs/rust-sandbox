@@ -3,11 +3,12 @@ members = [
     "./retry",
     "./fluent-main",
     "./traits",
-    "./tmc"
+    "./tmc",
+    "./run-hyper",
+    "./run-hyper10"
 ]
 
 [dependencies]
-clippy = {version = "*", optional = true}
 
 [features]
 default = []

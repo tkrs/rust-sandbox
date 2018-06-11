@@ -51,7 +51,7 @@ fn main() {
 
                 // thread::sleep(10.millis());
                 let pool = pool.lock().expect("Client couldn't be locked.");
-                pool.send(tag, a, timestamp).unwrap();
+                pool.send(tag, &a, timestamp).unwrap();
                 thread::sleep(Duration::new(0, 5));
             }
         });
